@@ -30,6 +30,12 @@ param(
     # Name of the reference voice shipped in the bundle's voices/ folder. The bridge
     # resolves it to a live speaker id at call time, so ids can change per machine.
     [string]$VoiceName = "Augusta_Thoughts_I",
+    # Speech pace. 1.0 = natural. Uses the model's own speaking-rate control
+    # (utf-8 bytes per second), not time stretching, so prosody stays intact.
+    [double]$Speed = 1.0,
+    # Measured natural pace of this voice, in bytes per second. Only matters when
+    # -Speed is not 1.0; override if the pace feels off.
+    [double]$BaseRate = 16.25,
     [int]$Port = 1919,
     [string]$Distro = "Ubuntu",
     # WSL path of the bundle. Empty = the folder this script's WSL twin lives in
@@ -122,8 +128,12 @@ if ($v -ne "" -and $v -ne "default") {
     }
 }
 
-$json = $body | ConvertTo-Json -Compress
+if ($Speed -ne 1.0 -and $Speed -gt 0) {
+    # the model takes pace as bytes/second; BaseRate is this voice's natural pace
+    $body.condition_values = @{ speaking_rate = [math]::Round($BaseRate * $Speed, 3) }
+}
 
+$json = $body | ConvertTo-Json -Compress
 try {
     Invoke-WebRequest -Uri "$base/v1/audio/speech" -Method Post -ContentType "application/json" `
         -Body $json -OutFile $Out -TimeoutSec 600 | Out-Null

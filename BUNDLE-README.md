@@ -116,6 +116,27 @@ of a file.
 `zonos3_say.ps1` also starts the server through `wsl.exe` if it is not running, so you can
 `stop` it between sessions and it comes back by itself.
 
+## 4b. Speed
+
+Pace is a first-class control in this model, not time stretching, so the voice keeps its
+character when it talks faster:
+
+```powershell
+powershell -File zonos3_say.ps1 -TextFile in.txt -Out out.wav -Speed 1.2
+```
+
+Under the hood that sets `condition_values.speaking_rate`, which the model measures in UTF-8
+bytes per second. The natural pace of this voice measured 16.25 B/s on a long sentence, which is
+the `-BaseRate` default; the bridge multiplies it by `-Speed`.
+
+Measured on one 156-byte sentence with the bundled voice: 9.60 s at 1.0, 8.40 s at 1.1, 7.87 s
+at 1.2, 7.33 s at 1.3.
+
+Caveat worth knowing: the model has 30 discrete rate buckets, and `-BaseRate` is calibrated on
+longer text. On very short lines a large `-Speed` overshoots, because a couple of words do not
+average out to the same bytes/sec. If a specific text comes out faster or slower than you wanted,
+run it once at 1.0, measure the duration, and pass a corrected `-BaseRate`.
+
 ## 5. Keep it running from Windows startup (optional)
 
 `zonos3-autostart.vbs` starts the server at logon with no console window and no terminal left
