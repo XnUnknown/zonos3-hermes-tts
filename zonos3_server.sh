@@ -13,11 +13,44 @@
 
 set -u
 
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PORT="${ZONOS_PORT:-1919}"
-ROOT="${ZONOS_ROOT:-$HOME/ZONOS3-Mini}"
+ROOT="${ZONOS_ROOT:-$HERE}"
 GGML="$ROOT/servers/ggml"
 BIN="$GGML/build-cuda/zonos3-server"
 LOG="${ZONOS_LOG:-$HOME/zonos3-server.log}"
+HF_BASE="${ZONOS_HF_BASE:-https://huggingface.co/Zyphra/ZONOS3-Mini/resolve/main/gguf}"
+
+# remote name : local name
+WEIGHTS=(
+    "backbone-ptq.gguf:zonos3-ptq.gguf"
+    "zac-keep2.gguf:zac-keep2.gguf"
+    "spk-encoder.gguf:spk-encoder.gguf"
+)
+
+# First run downloads the weights (about 1.1 GB, public, no token). Present weights are
+# left alone, partial downloads resume.
+fetch_weights() {
+    mkdir -p "$GGML/gguf" || return 1
+    local entry remote local_name path
+    for entry in "${WEIGHTS[@]}"; do
+        remote="${entry%%:*}"
+        local_name="${entry##*:}"
+        path="$GGML/gguf/$local_name"
+        if [ -s "$path" ] && [ "$(stat -c%s "$path")" -gt 10000000 ]; then
+            echo "  have $local_name ($(du -h "$path" | cut -f1))"
+            continue
+        fi
+        echo "  downloading $local_name"
+        if ! curl -L --fail --progress-bar -C - -o "$path" "$HF_BASE/$remote"; then
+            echo "download failed for $remote" >&2
+            echo "fetch it by hand from https://huggingface.co/Zyphra/ZONOS3-Mini/tree/main/gguf" >&2
+            return 1
+        fi
+    done
+    echo "  weights ready"
+    return 0
+}
 
 health() {
     curl -sf --max-time 2 "http://127.0.0.1:$PORT/v2/health" >/dev/null 2>&1
@@ -34,8 +67,12 @@ status)
     fi
     exit 0
     ;;
+fetch)
+    fetch_weights
+    exit $?
+    ;;
 start) ;;
-*) echo "usage: bash zonos3_server.sh [start|stop|status]" >&2; exit 64 ;;
+*) echo "usage: bash zonos3_server.sh [start|stop|status|fetch]" >&2; exit 64 ;;
 esac
 
 if health; then
@@ -45,9 +82,12 @@ fi
 
 if [ ! -x "$BIN" ]; then
     echo "missing binary: $BIN" >&2
-    echo "put the ZONOS3-Mini tree at $ROOT (or set ZONOS_ROOT)" >&2
+    echo "unzip the bundle somewhere and run this script from inside it (or set ZONOS_ROOT)" >&2
     exit 1
 fi
+
+echo "checking model weights"
+fetch_weights || exit 1
 
 # The binary was compiled with a RUNPATH pointing at the build machine's home
 # directory and it links the CUDA runtime. Point the loader at the libraries that
