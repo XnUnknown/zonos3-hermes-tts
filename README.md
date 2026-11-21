@@ -129,6 +129,31 @@ The first line then costs a few seconds of load.
 - This server is OpenAI-compatible but rejects `speed` with 422, so the bridge never sends it.
 - Logs go to `~/zonos3-server.log`.
 
+## Two ways to get it running
+
+**A. The bundle zip (easiest).** The maintainer publishes `zonos3-tts-bundle.zip`, about 426 MB.
+It contains the compiled server, the CUDA runtime libraries, the scripts and a README. The
+weights are deliberately absent: `zonos3_server.sh` downloads about 1.1 GB from Hugging Face on
+first run. Unpack it inside WSL and start it, nothing else to install:
+
+```bash
+mkdir -p ~/zonos3 && cd ~/zonos3
+python3 -m zipfile -e /mnt/d/zonos3-tts-bundle.zip .
+chmod +x zonos3_server.sh servers/ggml/build-cuda/zonos3-server
+bash zonos3_server.sh
+```
+
+(`unzip` is missing from many fresh WSL distros, hence `python3 -m zipfile`. Both work.)
+
+**B. Assemble it yourself** from the pieces described above: clone upstream, fetch the weights
+with the curl commands below, and either build `build-cuda` with cmake or get it from the
+maintainer.
+
+## Sync weights by hand
+
+`bash zonos3_server.sh fetch` downloads only the weights and exits, useful if you want the
+1.1 GB out of the way before the first voice request.
+
 ## Credits and licences
 
 - ZONOS3-Mini code, patches and weights: [Zyphra/ZONOS3-Mini](https://github.com/Zyphra/ZONOS3-Mini),
