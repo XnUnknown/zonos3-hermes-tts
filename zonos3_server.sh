@@ -97,7 +97,11 @@ export LD_LIBRARY_PATH="$GGML/build-cuda/ggml/src:$GGML/build-cuda/ggml/src/ggml
 cd "$GGML" || exit 1
 
 VOICES=()
-[ -d gguf/voices ] && VOICES=(--tts-default-voices-dir gguf/voices)
+if [ -d "$ROOT/voices" ]; then
+    VOICES=(--tts-default-voices-dir "$ROOT/voices")
+elif [ -d gguf/voices ]; then
+    VOICES=(--tts-default-voices-dir gguf/voices)
+fi
 
 nohup "$BIN" gguf/zonos3-ptq.gguf --gpu --host 127.0.0.1 --port "$PORT" "${VOICES[@]}" \
     >>"$LOG" 2>&1 &

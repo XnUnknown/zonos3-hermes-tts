@@ -27,9 +27,12 @@ param(
     [Parameter(Mandatory = $true)][string]$TextFile,
     [Parameter(Mandatory = $true)][string]$Out,
     [string]$Voice = "",
+    # Name of the reference voice shipped in the bundle's voices/ folder. The bridge
+    # resolves it to a live speaker id at call time, so ids can change per machine.
+    [string]$VoiceName = "Augusta_Thoughts_I",
     [int]$Port = 1919,
     [string]$Distro = "Ubuntu",
-    # WSL path of the ZONOS3-Mini tree. Empty = ~/ZONOS3-Mini
+    # WSL path of the bundle. Empty = the folder this script's WSL twin lives in
     [string]$Root = "",
     [switch]$NoSpawn
 )
@@ -88,7 +91,37 @@ if (-not (Test-Health)) {
 
 $body = @{ model = "zonos3"; input = $text; response_format = "wav" }
 $v = if ($Voice) { $Voice.Trim() } else { "" }
-if ($v -ne "" -and $v -ne "default") { $body.voice = $v }
+
+if ($v -ne "" -and $v -ne "default") {
+    # explicit speaker id, e.g. default_e9c4db8a505f1201
+    $body.voice = $v
+    # without this the server tries raw-reference cloning and demands extra encoders
+    $body.speaker_mode = "embedding"
+} elseif ($VoiceName) {
+    # resolve the bundled reference voice by name, since the id is machine generated
+    try {
+        $speakers = (Invoke-RestMethod -Uri "$base/v2/speakers" -TimeoutSec 8).speakers
+        $hit = $speakers | Where-Object {
+            $_.original_name -and ($_.original_name -like "$VoiceName*")
+        } | Select-Object -First 1
+        if (-not $hit) {
+            $pretty = ($VoiceName -replace '[_\-]+', ' ')
+            $hit = $speakers | Where-Object { $_.label -eq $pretty } | Select-Object -First 1
+        }
+        if (-not $hit) {
+            $hit = $speakers | Where-Object { $_.is_default } | Select-Object -First 1
+        }
+        if ($hit) {
+            $body.voice = $hit.id
+            # force embedding cloning: raw-reference mode needs zac-encoder + ssl-teacher
+            $body.speaker_mode = "embedding"
+            Write-Verbose "voice: $($hit.label) ($($hit.id))"
+        }
+    } catch {
+        Write-Verbose "could not resolve voice '$VoiceName', using server default"
+    }
+}
+
 $json = $body | ConvertTo-Json -Compress
 
 try {
