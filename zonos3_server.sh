@@ -58,8 +58,35 @@ health() {
 
 case "${1:-start}" in
 stop)
-    pkill -f "zonos3-server gguf" && echo "stopped" || echo "not running"
+    pkill -f "zonos3-server gguf" && echo "stopped backend" || echo "backend not running"
+    pkill -f "zonos3_lazy.py" && echo "stopped lazy front end" || echo "front end not running"
     exit 0
+    ;;
+lazy)
+    # request-only front end: no model loaded until something asks for speech
+    pkill -f "zonos3-server gguf" >/dev/null 2>&1
+    pkill -f "zonos3_lazy.py" >/dev/null 2>&1
+    sleep 1
+    if [ ! -f "$HERE/zonos3_lazy.py" ]; then
+        echo "missing $HERE/zonos3_lazy.py" >&2
+        exit 1
+    fi
+    ZONOS_ROOT="$ROOT" ZONOS_IDLE="${ZONOS_IDLE:-120}" \
+        nohup python3 "$HERE/zonos3_lazy.py" --port "$PORT" --backend-port "${ZONOS_BACKEND_PORT:-1920}" \
+        --idle "${ZONOS_IDLE:-120}" >>"$LOG" 2>&1 &
+    echo "waiting for the lazy front end on port $PORT"
+    i=0
+    while [ "$i" -lt 30 ]; do
+        if health; then
+            echo "ready: http://127.0.0.1:$PORT (model loads on first request, unloads after ${ZONOS_IDLE:-120}s idle)"
+            exit 0
+        fi
+        sleep 1
+        i=$((i + 1))
+    done
+    echo "front end did not come up, see $LOG" >&2
+    tail -n 15 "$LOG" >&2
+    exit 2
     ;;
 status)
     if health; then echo "running on $PORT"; curl -s "http://127.0.0.1:$PORT/v2/health"; echo
@@ -72,7 +99,7 @@ fetch)
     exit $?
     ;;
 start) ;;
-*) echo "usage: bash zonos3_server.sh [start|stop|status|fetch]" >&2; exit 64 ;;
+*) echo "usage: bash zonos3_server.sh [start|stop|status|fetch|lazy]" >&2; exit 64 ;;
 esac
 
 if health; then

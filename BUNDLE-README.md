@@ -37,21 +37,30 @@ chmod +x zonos3_server.sh servers/ggml/build-cuda/zonos3-server
 ## 2. Start it
 
 ```bash
-bash ~/zonos3/zonos3_server.sh
+bash ~/zonos3/zonos3_server.sh lazy      # on demand, recommended
+bash ~/zonos3/zonos3_server.sh start     # always resident
 ```
 
-First run downloads about 1.1 GB of weights from Hugging Face (public, no token), then prints
-`ready: http://127.0.0.1:1919` and returns your prompt. The server keeps running in the
-background; there is no terminal to babysit.
+First run downloads about 1.1 GB of weights from Hugging Face (public, no token).
+
+**`lazy` (what autostart uses).** A 26 MB front end sits on port 1919 and answers health checks
+without touching the model. On the first speech request it loads the model onto the GPU, answers,
+and after 120 seconds without requests it unloads again. Measured on an RTX 3050: 159 MB of VRAM
+while idle, 2.3 GB while loaded, first request after idle takes about 14 seconds, following ones
+about 3 seconds. Raise or lower the window with `ZONOS_IDLE=300 bash zonos3_server.sh lazy`.
+
+**`start`.** The classic resident server: loads once and never unloads, holds 1.65 GB of VRAM from
+boot. Fastest responses, greedy on memory.
 
 ```bash
-bash ~/zonos3/zonos3_server.sh status    # health
-bash ~/zonos3/zonos3_server.sh stop      # frees the VRAM
+bash ~/zonos3/zonos3_server.sh status    # health, plus loaded or asleep
+bash ~/zonos3/zonos3_server.sh stop      # stops front end and backend
 bash ~/zonos3/zonos3_server.sh fetch     # only download weights
 ```
 
-From Windows: `curl.exe http://127.0.0.1:1919/v2/health` should return `{"status":"ok"}`.
-WSL2 forwards localhost, so nothing to configure.
+From Windows: `curl.exe http://127.0.0.1:1919/v2/health` shows `"backend": "asleep"` or
+`"loaded"`. WSL2 forwards localhost, so nothing to configure. `curl.exe
+http://127.0.0.1:1919/lazy/status` reports how many loads happened and how long it has been idle.
 
 ## 3. The voice
 
